@@ -1,0 +1,700 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Copyright (c) 1995-2015 held by the author(s).  All rights reserved.
+                          
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer
+      in the documentation and/or other materials provided with the
+      distribution.
+    * Neither the names of the Naval Postgraduate School (NPS)
+      Modeling Virtual Environments and Simulation (MOVES) Institute
+      (http://www.nps.edu and http://www.MovesInstitute.org)
+      nor the names of its contributors may be used to endorse or
+      promote products derived from this software without specific
+      prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+-->
+
+<!--
+    Document   : build.xml
+    Created on : 10 May 2008
+    Author     : Don Brutzman
+    Description: Ant build.xml file for X3D schemas and DTDs
+-->
+<project name="X3D specifications, schemas and DTDs" default="all" basedir=".">
+    <description>Build X3D specifications:  schemas and DTDs</description>
+
+    <!-- build tasks for X3D specifications appear in x3d-code/www.web3d.org/specifications, x3d-code/www.web3d.org/tools/X3D-Edit/javahelp, x3d-code/www.web3d.org/showcase2009 -->
+    
+    <!-- configuration properties ============================================================== -->
+
+    <property name=  "access.properties.filename"  value="access.properties"/>
+    <property file="${access.properties.filename}"/> <!-- loads the properties defined in the .properties file -->
+
+    <!-- properties common to all build files and archives ======================================== -->
+    <property environment="env"/>
+    
+    <!-- ANT Contrib archive at http://sourceforge.net/project/showfiles.php?group_id=36177    -->
+    <!-- must have ant-contrib.jar in ANT_HOME/lib (or else specify path)                      -->
+    <!-- note Netbeans default path is something like C:\Program Files\NetBeans 8.0\extide\ant -->
+    <!-- and will have to be overridden by going to Tools > Options > Java > Ant               -->
+    <!-- and then pointing to C:\apache-ant-1.9.3 (or somesuch directory)                      -->
+    <taskdef resource="net/sf/antcontrib/antlib.xml"/>
+
+    <property name="saxon.dir"        location="../x3d/tools/jar" description="relative path from specifications directory"/>
+    <property name="saxon.jar"           value="saxon9B.jar"/>
+
+    <target name="get.saxon" description="get saxon.jar if not checked out" depends="get.saxon.check" unless="saxon.found"> 
+        <echo message="get saxon.jar if not checked out"/>
+        <mkdir dir="${saxon.dir}"/>
+        <get src="http://svn.code.sf.net/p/x3d/code/www.web3d.org/x3d/tools/jar/${saxon.jar}"
+            dest="${saxon.dir}/${saxon.jar}" verbose="true" ignoreerrors="${ignoreSetupDownloadErrors}"/>
+    </target>
+    <target name="get.saxon.check">
+        <condition property="saxon.found" else="false">
+            <available file="${saxon.dir}/${saxon.jar}"/>
+        </condition>
+        <echo message="found ${saxon.dir}/${saxon.jar}: ${saxon.found}"/>
+    </target>
+    
+    <xmlcatalog id="X3D.DTDs">
+        <dtd publicId="ISO//Web3D//DTD X3D 3.0//EN"                                  location="x3d-3.0.dtd"/>
+        <dtd publicId="ISO//Web3D//DTD X3D 3.1//EN"                                  location="x3d-3.1.dtd"/>
+        <dtd publicId="ISO//Web3D//DTD X3D 3.2//EN"                                  location="x3d-3.2.dtd"/>
+        <dtd publicId="ISO//Web3D//DTD X3D 3.3//EN"                                  location="x3d-3.3.dtd"/>
+        <dtd publicId="ISO//Web3D//DTD X3D 3.4//EN"                                  location="x3d-3.4.dtd"/>
+        <dtd publicId="http://www.web3d.org/specifications/x3d-3.0.dtd"              location="x3d-3.0.dtd"/>
+        <dtd publicId="http://www.web3d.org/specifications/x3d-3.1.dtd"              location="x3d-3.1.dtd"/>
+        <dtd publicId="http://www.web3d.org/specifications/x3d-3.2.dtd"              location="x3d-3.2.dtd"/>
+        <dtd publicId="http://www.web3d.org/specifications/x3d-3.3.dtd"              location="x3d-3.3.dtd"/>
+        <dtd publicId="http://www.web3d.org/specifications/x3d-3.4.dtd"              location="x3d-3.4.dtd"/>
+        <dtd publicId="file:///www.web3d.org/TaskGroups/x3d/translation/x3d-3.0.dtd" location="x3d-3.0.dtd"/>
+        <dtd publicId="file:///www.web3d.org/TaskGroups/x3d/translation/x3d-3.1.dtd" location="x3d-3.1.dtd"/>
+        <dtd publicId="file:///www.web3d.org/TaskGroups/x3d/translation/x3d-3.2.dtd" location="x3d-3.2.dtd"/>
+        <dtd publicId="file:///www.web3d.org/TaskGroups/x3d/translation/x3d-3.3.dtd" location="x3d-3.3.dtd"/>
+        <dtd publicId="file:///www.web3d.org/TaskGroups/x3d/translation/x3d-3.4.dtd" location="x3d-3.4.dtd"/>
+    </xmlcatalog>
+   
+    <!-- Ant macro definitions ===================================================================================== -->
+
+    <!-- excerpted/adapted from "SAXON XSLT Processing with Ant" by James Fuller, http://ablog.apress.com/?p=753 -->
+    <macrodef name="Saxon9.XML" description="Invoke XSLT transformation on passed inputXML to produce outputFile using passed stylesheet">
+        <attribute name="inputXML"/>
+        <attribute name="outputFile"/>
+        <attribute name="stylesheet"/>
+        <attribute name="parameters" default=""/>
+        <attribute name="compiled"   default="false"/>
+        <attribute name="verbose"    default="false"/>
+        <sequential>
+            <if>
+                <equals arg1="@{verbose}" arg2="true" />
+                <then>
+                    <echo message="Saxon9.XML processing @{inputXML} and producing @{outputFile} using @{stylesheet}"/>
+                </then>
+            </if>
+            <if>
+                <equals arg1="@{compiled}" arg2="true" />
+                <then>
+                    <java classname="net.sf.saxon.Transform" classpath="${saxon.dir}/${saxon.jar};." fork="true" failonerror="false">
+                        <!--<arg value="-t"/> timing information -->
+                        <arg value="-w1"/> <!-- recover after writing a warning message -->
+                        <arg value="-c"/>  <!-- compiled stylesheet -->
+                        <arg value="-o"/>
+                        <arg value="@{outputFile}"/>
+                        <arg value="@{inputXML}"/>
+                        <arg value="@{stylesheet}"/>
+                        <arg value="@{parameters}"/>
+                    </java>
+                </then>
+                <else>
+                    <java classname="net.sf.saxon.Transform" classpath="${saxon.dir}/${saxon.jar};." fork="true" failonerror="false">
+                        <!--<arg value="-t"/> timing information -->
+                        <arg value="-w1"/> <!-- recover after writing a warning message -->
+                        <arg value="-o"/>
+                        <arg value="@{outputFile}"/>
+                        <arg value="@{inputXML}"/>
+                        <arg value="@{stylesheet}"/>
+                        <arg value="@{parameters}"/>
+                    </java>
+                </else>
+            </if>
+        </sequential>
+    </macrodef>
+
+    <!-- target tasks ===================================================================== -->
+    <target name="all" depends="build,build.generate.X3dSpecificationInterfaces,upload"
+        description="after generating DTD and schema documentation:  clean backups, validate, zip and upload the X3D DTD and schema specifications distribution">
+        <!-- upload.KML.documentation is rarely performed and so is not included as a dependency here -->
+    </target>
+
+    <target name="build.generate.X3dSpecificationInterfaces">
+        <property name="X3dDtdsSchemas.dir" location="."/>
+        <ant antfile="../x3d/stylesheets/build.xml" target="BuildSpecificationXmlEncodingFromSchema.saxon" useNativeBasedir="true"/>
+        <ant antfile="../x3d/stylesheets/build.xml" target="BuildSpecificationVrmlEncodingFromSchema.saxon"   useNativeBasedir="true"/>
+        <ant antfile="../x3d/stylesheets/build.xml" target="BuildSpecificationLanguageBindingJava.saxon"   useNativeBasedir="true"/>
+        <!-- no longer needed
+        <ant antfile="../x3d/stylesheets/build.xml" target="uploadSpecificationInterfaces"                 useNativeBasedir="true"/> -->
+    </target>
+
+    <target name="build" depends="renameDoctypeDocumentation,cleanupDoctypeDocumentation,cleanupSchemaDocumentation,cleanupSchemaHeaderComments,clean,validate,zip"
+        description="after generating DTD and schema documentation:  clean backups, validate, and zip the X3D DTD and schema specifications distribution without upload">
+    </target>
+    
+    <target name="clean" depends="clean.backups,clean.zips" description="clean up" >
+    </target>
+    
+    <target name="clean.backups" depends="" description="clean out unnecessary backup files (only)" >
+        <echo message="clean/delete backup files"/>
+        <delete verbose="true">
+            <fileset dir="." includes="_new_pretty_print.html"/>
+            <fileset dir="." includes="_new_result.wrl"/>
+            <fileset dir="." includes="_new_result.x3d"/>
+            <fileset dir="." includes="_new_result.x3dv"/>
+            <fileset dir="." includes="*.bak"/>
+            <fileset dir="." includes="hs_err_pid*.log"/>
+            <fileset dir="." includes="manifest.mf"/>
+            <fileset dir="." includes="*.$$$$$$"/> <!-- escape $ as $$ -->
+            <fileset dir="." includes="Untitled-?.x3d"/>
+            <fileset dir="." includes="**/*.bak"/>
+            <fileset dir="." includes="**/*.$$$$$$"/>
+        </delete>
+    </target>
+    
+    <target name="clean.zips" depends="" description="clean autogenerated .zip files" >
+        <echo message="clean/delete autogenerated .zip files"/>
+        <delete verbose="true">
+            <fileset dir="." includes="X3dSchemaDocumentation3.?.zip"/>
+            <fileset dir="." includes="x3d-3.?.validation.zip"/>
+        </delete>
+    </target>
+    
+    <target name="refresh.upload" depends="zip,upload"/>
+    
+    <target        name="scp.uploadPropertiesFound">
+        <condition property="uploadPropertiesFound" else="false">
+            <and>
+                <isset property="sftpServer.web3d"/>
+                <isset property="sftpDirectory.web3d.specifications"/>
+                <isset property="username.web3d"/>
+                <isset property="password.web3d"/>
+            </and>
+        </condition>
+        <echo  message="uploadPropertiesFound=${uploadPropertiesFound}"/>
+    </target>
+
+    <target name="scp.uploadPropertiesReport" depends="scp.uploadPropertiesFound"
+        description="report availability of properties for username, password, etc.">
+        <!-- debug
+        <echo  message="access.properties.filename=${access.properties.filename}"/> -->
+        <echo  message="   sftpServer.web3d=${sftpServer.web3d}"/>
+        <echo  message="sftpDirectory.web3d.specifications=${sftpDirectory.web3d.specifications}"/>
+        <echo  message="     username.web3d=${username.web3d}"/>
+        <echo  message="     password.web3d=${password.web3d}"/>
+    </target>
+
+    <target name="scp.askUsernamePassword.web3d" depends="scp.uploadPropertiesFound" unless="uploadPropertiesFound"
+        description="If needed, ask for username, password">
+        <echo  message="hostname.web3d, username.web3d, password.web3d obtained from file ${access.properties.filename}"/>
+        <echo  message="username.web3d, password.web3d not obtained via file ${access.properties.filename}"/>
+        <input message="username.web3d:"
+           addproperty="username.web3d" />
+        <input message="password.web3d:"
+           addproperty="password.web3d" />
+        <echo  message="username.web3d=${username.web3d}"/>
+        <echo  message="password.web3d=################"/>
+        <!--<echo  message="password.web3d=${password.web3d}"/> debug -->
+    </target>
+    
+    <target name="upload" depends="upload.updates,upload.products,upload.zips.documentation"
+        description="full upload of all specification updates">
+            <!-- upload.KML.documentation is rarely performed and so is not included as a dependency here -->
+            <echo message="Online links available: "/>
+            <echo message="   http://www.web3d.org/specifications"/>
+            <echo message="   http://www.web3d.org/x3d/content/examples/X3dResources.html#AuthoringSupport"/>
+    </target>
+    
+    <!-- ensure that you have already connected to this host via ssh and saved the server key -->
+    <target name="upload.updates" depends="clean.backups,renameDoctypeDocumentation,validate,scp.askUsernamePassword.web3d"
+        description="scp (sftp) upload of updated X3D specification products">
+        <echo  message="scp (sftp) upload specification DTDs/schemas/documentation to ${username.web3d}@${sftpServer.web3d}${sftpDirectory.web3d.specifications}"/>
+        <echo  message="Upload frequently updated overview files..."/>
+        <scp sftp="true" remotetodir="${username.web3d}@${sftpServer.web3d}:${sftpDirectory.web3d.specifications}" password="${password.web3d}" verbose="true">
+            <fileset dir=".">
+                <include name="contents.html"/>
+                <include name="X3dSpecificationRelationships.*"/>
+                <include name="X3dNodeInventoryComparison.*"/>
+            </fileset>
+        </scp>
+        <echo  message="Upload frequently updated Java language binding files..."/>
+        <scp sftp="true" remotetodir="${username.web3d}@${sftpServer.web3d}:${sftpDirectory.web3d.specifications}/JavaLanguageBinding/Part2" password="${password.web3d}" verbose="true">
+            <fileset dir="JavaLanguageBinding/Part2">
+                <include name="*.*"/>
+            </fileset>
+        </scp>
+        <scp sftp="true" remotetodir="${username.web3d}@${sftpServer.web3d}:${sftpDirectory.web3d.specifications}/JavaLanguageBinding/Images" password="${password.web3d}" verbose="true">
+            <fileset dir="JavaLanguageBinding/images">
+                <include name="*.*"/>
+            </fileset>
+        </scp>
+    </target>
+    
+    <!-- ensure that you have already connected to this host via ssh and saved the server key -->
+    <target name="upload.products" depends="clean.backups,renameDoctypeDocumentation,validate,scp.askUsernamePassword.web3d"
+        description="scp (sftp) upload of updated X3D specification products">
+        <echo  message="scp (sftp) upload specification DTDs/schemas/documentation to ${username.web3d}@${sftpServer.web3d}${sftpDirectory.web3d.specifications}"/>
+        <echo  message="upload all products and archive files..."/>
+        <scp sftp="true" remotetodir="${username.web3d}@${sftpServer.web3d}:${sftpDirectory.web3d.specifications}" password="${password.web3d}" verbose="true">
+            <fileset dir=".">
+                <include name="*.png"/>
+                <include name="*.spp"/>
+                <include name="*.vsd"/>
+                <include name="**/JavaLanguageBinding/*.*"/>
+                <include name="*.dtd"/>
+                <include name="*.txt"/>
+                <include name="*.html"/>
+                <include name="*.xml"/>
+                <include name="*.xsd"/>
+                <include name="*.pdf"/>
+                <include name="access.properties.blocker.txt"/>
+                <include name="access.properties.template"/>
+                <include name="images/*.*"/>
+                <!-- excluding these-->
+                <exclude name="index*.redirect.html"/>
+                <exclude name="**/access.properties"/>
+                <exclude name="**/_archive"/>
+                <exclude name="**/_archive/*"/>
+                <exclude name="**/CVS/*"/>
+                <exclude name="**/.svn/*"/>
+                <exclude name="**/_new*.*"/>
+                <exclude name="**/*.bak"/>
+                <exclude name="**/*.$$$$$$"/> <!-- escape $ as $$ -->
+            </fileset>
+        </scp>
+        <echo message="upload.products scp ssh-sftp task complete"/>
+    </target>
+    
+    <target name="cleanup.KML.documentation" depends=""
+           description="cleanup KML documentation for kml22gx.xsd">
+        <echo  message="prerequisite: autogenerated documentation export of kml22gx.xsd by XMLSpy to directory kml2.2/documentation"/>
+        <replace file="kml2.2/documentation/kml22gx.html"  token="file:///C:/x3d-code/www.web3d.org/specifications/kml2.2/" value="http://www.web3d.org/specifications/kml2.2/"  summary="true" failOnNoReplacements="false"/>
+        <replace file="kml2.2/documentation/kml22gx.html"  token="C:\x3d-code\www.web3d.org\specifications\kml2.2\"         value="http://www.web3d.org/specifications/kml2.2/"  summary="true" failOnNoReplacements="false"/>
+        <!--
+        <replace file="kml2.2/documentation/ogckml22.html" token="file:///C:/x3d-code/www.web3d.org/specifications/kml2.2/" value="http://www.web3d.org/specifications/kml2.2/"  summary="true" failOnNoReplacements="false"/>
+        <replace file="kml2.2/documentation/ogckml22.html" token="C:\x3d-code\www.web3d.org\specifications\kml2.2\"         value="http://www.web3d.org/specifications/kml2.2/"  summary="true" failOnNoReplacements="false"/>
+        -->
+     </target>
+    
+    <target name="upload.KML.documentation" depends="cleanup.KML.documentation,clean.backups,scp.askUsernamePassword.web3d"
+           description="scp upload of KML schemas and documentation">
+        <echo  message="scp upload of KML schemas and documentation to ${sftpServer.web3d}"/>
+        <scp sftp="true" remotetodir="${username.web3d}@${sftpServer.web3d}:${sftpDirectory.web3d.specifications}/kml2.2" password="${password.web3d}" verbose="true">
+            <fileset dir="kml2.2">
+                <!-- includes top-level schema and contained documentation subdirectory -->
+                <include name="**/*.*"/>
+                <!-- excluding these-->
+                <exclude name="index*.redirect.html"/>
+                <exclude name="**/access.properties"/>
+                <exclude name="**/_archive"/>
+                <exclude name="**/_archive/*"/>
+                <exclude name="**/CVS/*"/>
+                <exclude name="**/.svn/*"/>
+                <exclude name="**/_new*.*"/>
+                <exclude name="**/*.bak"/>
+                <exclude name="**/tmp*.html"/>
+                <exclude name="**/*.$$$$$$"/> <!-- escape $ as $$ -->
+            </fileset>
+        </scp>
+        <echo  message="upload.KML.documentation scp ssh-sftp task complete"/>
+    </target>
+    
+    <target name="upload.zips.documentation" depends="scp.askUsernamePassword.web3d"
+        description="scp upload of updated X3D specification .zips and corresponding autogenerated documentation">
+        <echo  message="scp upload to ${sftpServer.web3d}"/>
+        <scp sftp="true" remotetodir="${username.web3d}@${sftpServer.web3d}:${sftpDirectory.web3d.specifications}" password="${password.web3d}" verbose="true">
+            <!-- second upload .zip archives and documentation -->
+            <fileset dir=".">
+                <include name="X3dDoctypeDocumentation3.*.html"/>
+                <include name="X3dSchemaDocumentation3.*.html"/>
+                <include name="X3dSchemaDocumentation3.3/*.*"/>
+                <include name="X3dSchemaDocumentation3.4/*.*"/>
+                <include name="X3dSchemaDocumentation3.2/*.*"/>
+                <include name="X3dSchemaDocumentation3.1/*.*"/>
+                <include name="X3dSchemaDocumentation3.0/*.*"/>
+                <include name="X3dSchemaDocumentation3.3.zip"/>
+                <include name="X3dSchemaDocumentation3.4.zip"/>
+                <include name="X3dSchemaDocumentation3.2.zip"/>
+                <include name="X3dSchemaDocumentation3.1.zip"/>
+                <include name="X3dSchemaDocumentation3.0.zip"/>
+                <include name="x3d-3.*.validation.zip"/>
+                <!-- excluding these-->
+                <exclude name="index*.redirect.html"/>
+                <exclude name="**/access.properties"/>
+                <exclude name="**/_archive"/>
+                <exclude name="**/_archive/*"/>
+                <exclude name="**/CVS/*"/>
+                <exclude name="**/.svn/*"/>
+                <exclude name="**/_new*.*"/>
+                <exclude name="**/*.bak"/>
+                <exclude name="**/tmp*.html"/>
+                <exclude name="**/*.$$$$$$"/> <!-- escape $ as $$ -->
+            </fileset>
+        </scp>
+        <echo  message="upload.zips.documentation ssh-sftp task complete"/>
+    </target>
+    
+    <target name="validate" depends="" description="XML validation checks" >
+        <echo message="validate build.xml"/>
+        <xmlvalidate file="build.xml"                      failonerror="false" warn="true" lenient="true"/>
+        <echo message="check XML Spy project file well formed"/>
+        <xmlvalidate file="X3dSchemaDtd-XmlSpyProject.spp" failonerror="false" warn="true" lenient="true"/>
+        <echo message="validate OasisXmlCatalogX3D.xml"/>
+        <xmlvalidate file="OasisXmlCatalogX3D.xml"         failonerror="false" warn="true" lenient="true"/>
+        <echo message="well-formed check X3D schemas"/>
+        <xmlvalidate failonerror="false" warn="true" lenient="true">
+            <fileset dir=".">
+                <include name="x3d-3.?.xsd"/>
+            </fileset>
+        </xmlvalidate>
+        <!-- TODO:  validate schema using schema?  fails obscurely...
+        <xmlvalidate failonerror="false" warn="true" lenient="false">
+            <fileset dir=".">
+                <include name="x3d-3.?.xsd"/>
+            </fileset>
+        </xmlvalidate>
+        -->
+        <echo message="check DTD versions 3.0, 3.1, 3.2, 3.3 and 3.4 by validating HelloWorld.x3d"/>
+        <!-- HelloWorld.x3d must remain X3D version="3.0" for these checks to work -->
+        <xmlvalidate file="../x3d/content/examples/HelloWorld.x3d" warn="true" failonerror="false">
+            <dtd publicId="ISO//Web3D//DTD X3D 3.0//EN" location="x3d-3.0.dtd"/>
+        </xmlvalidate>
+        <xmlvalidate file="../x3d/content/examples/HelloWorld.x3d" warn="true" failonerror="false">
+            <dtd publicId="ISO//Web3D//DTD X3D 3.1//EN" location="x3d-3.1.dtd"/>
+        </xmlvalidate>
+        <xmlvalidate file="../x3d/content/examples/HelloWorld.x3d" warn="true">
+            <dtd publicId="ISO//Web3D//DTD X3D 3.2//EN" location="x3d-3.2.dtd"/>
+        </xmlvalidate>
+        <xmlvalidate file="../x3d/content/examples/HelloWorld.x3d" warn="true">
+            <dtd publicId="ISO//Web3D//DTD X3D 3.3//EN" location="x3d-3.3.dtd"/>
+        </xmlvalidate>
+        <xmlvalidate file="../x3d/content/examples/HelloWorld.x3d" warn="true">
+            <dtd publicId="ISO//Web3D//DTD X3D 3.4//EN" location="x3d-3.4.dtd"/>
+        </xmlvalidate>
+    </target>
+    
+    <target name="zip" depends="renameDoctypeDocumentation" description="generate .zip distribution">
+        <echo message="** production note:  ensure that latest schema documentation is already generated using XML Spy, then close XML Spy to remove temp files."/>
+        <!-- do not include KML documentation, too large (12MB) -->
+        <zip destfile="X3dSchemaDocumentation3.0.zip">
+            <zipfileset dir=".">
+                <include name="README.txt"/>
+                <include name="x3d-schema-changelog.txt"/>
+                <include name="x3d-3.0*.xsd"/>
+                <include name="X3dSchemaDocumentation3.0/**/*"/>
+            </zipfileset>
+        </zip>
+        <zip destfile="X3dSchemaDocumentation3.1.zip">
+            <zipfileset dir=".">
+                <include name="README.txt"/>
+                <include name="x3d-schema-changelog.txt"/>
+                <include name="x3d-3.1*.xsd"/>
+                <include name="X3dSchemaDocumentation3.1/**/*"/>
+            </zipfileset>
+        </zip>
+        <zip destfile="X3dSchemaDocumentation3.2.zip">
+            <zipfileset dir=".">
+                <include name="README.txt"/>
+                <include name="x3d-schema-changelog.txt"/>
+                <include name="x3d-3.2*.xsd"/>
+                <include name="X3dSchemaDocumentation3.2/**/*"/>
+            </zipfileset>
+        </zip>
+        <zip destfile="X3dSchemaDocumentation3.3.zip">
+            <zipfileset dir=".">
+                <include name="README.txt"/>
+                <include name="x3d-schema-changelog.txt"/>
+                <include name="x3d-3.3*.xsd"/>
+                <include name="X3dSchemaDocumentation3.3/**/*"/>
+            </zipfileset>
+        </zip>
+        <zip destfile="X3dSchemaDocumentation3.4.zip">
+            <zipfileset dir=".">
+                <include name="README.txt"/>
+                <include name="x3d-schema-changelog.txt"/>
+                <include name="x3d-3.4*.xsd"/>
+                <include name="X3dSchemaDocumentation3.4/**/*"/>
+            </zipfileset>
+        </zip>
+        <zip destfile="x3d-3.0.validation.zip">
+            <zipfileset dir=".">
+                <include name="README.txt"/>
+                <include name="contents.txt"/>
+                <include name="contents.html"/>
+                <include name="x3d-schema-changelog.txt"/>
+                <include name="x3d-3.0*.xsd"/>
+                <include name="x3d-dtd-changelog.txt"/>
+                <include name="x3d-3.0*.dtd"/>
+                <include name="X3dDoctypeDocumentation3.0.html"/>
+                <include name="catalog.dtd"/>
+                <include name="OasisXmlCatalogX3D.xml"/>
+            </zipfileset>
+        </zip>
+        <zip destfile="x3d-3.1.validation.zip">
+            <zipfileset dir=".">
+                <include name="README.txt"/>
+                <include name="contents.txt"/>
+                <include name="contents.html"/>
+                <include name="x3d-schema-changelog.txt"/>
+                <include name="x3d-3.1*.xsd"/>
+                <include name="x3d-dtd-changelog.txt"/>
+                <include name="x3d-3.1*.dtd"/>
+                <include name="X3dDoctypeDocumentation3.1.html"/>
+                <include name="catalog.dtd"/>
+                <include name="OasisXmlCatalogX3D.xml"/>
+            </zipfileset>
+        </zip>
+        <zip destfile="x3d-3.2.validation.zip">
+            <zipfileset dir=".">
+                <include name="README.txt"/>
+                <include name="contents.txt"/>
+                <include name="contents.html"/>
+                <include name="x3d-schema-changelog.txt"/>
+                <include name="x3d-3.2*.xsd"/>
+                <include name="x3d-dtd-changelog.txt"/>
+                <include name="x3d-3.2*.dtd"/>
+                <include name="X3dDoctypeDocumentation3.2.html"/>
+                <include name="catalog.dtd"/>
+                <include name="OasisXmlCatalogX3D.xml"/>
+            </zipfileset>
+        </zip>
+        <zip destfile="x3d-3.3.validation.zip">
+            <zipfileset dir=".">
+                <include name="README.txt"/>
+                <include name="contents.txt"/>
+                <include name="contents.html"/>
+                <include name="x3d-schema-changelog.txt"/>
+                <include name="x3d-3.3*.xsd"/>
+                <include name="x3d-dtd-changelog.txt"/>
+                <include name="x3d-3.3*.dtd"/>
+                <include name="X3dDoctypeDocumentation3.3.html"/>
+                <include name="catalog.dtd"/>
+                <include name="OasisXmlCatalogX3D.xml"/>
+            </zipfileset>
+        </zip>
+        <zip destfile="x3d-3.4.validation.zip">
+            <zipfileset dir=".">
+                <include name="README.txt"/>
+                <include name="contents.txt"/>
+                <include name="contents.html"/>
+                <include name="x3d-schema-changelog.txt"/>
+                <include name="x3d-3.4*.xsd"/>
+                <include name="x3d-dtd-changelog.txt"/>
+                <include name="x3d-3.4*.dtd"/>
+                <include name="X3dDoctypeDocumentation3.4.html"/>
+                <include name="catalog.dtd"/>
+                <include name="OasisXmlCatalogX3D.xml"/>
+            </zipfileset>
+        </zip>
+        <zip destfile="x3d-3.all.validation.zip">
+            <zipfileset dir=".">
+                <include name="README.txt"/>
+                <include name="contents.txt"/>
+                <include name="contents.html"/>
+                <include name="x3d-schema-changelog.txt"/>
+                <include name="x3d-3.*.xsd"/>
+                <include name="x3d-dtd-changelog.txt"/>
+                <include name="x3d-3.*.dtd"/>
+                <include name="X3dDoctypeDocumentation3.*.html"/>
+                <include name="catalog.dtd"/>
+                <include name="OasisXmlCatalogX3D.xml"/>
+                <include name="*.txt"/>
+                <include name="*.html"/>
+                <include name="*.xml"/>
+                <include name="*.png"/>
+                <include name="*.spp"/>
+                <include name="*.vsd"/>
+            </zipfileset>
+        </zip>
+        <echo>zip complete</echo>
+    </target>
+
+    <target name="renameDoctypeDocumentation" description="fix names from Netbeans documentation generator" >
+        <echo message="production note: DTD documentation is created manually within Netbeans via context menu for each DTD document"/>
+        <move file="x3d-3.0Documentation.html" tofile="X3dDoctypeDocumentation3.0.html" failonerror='false'/>
+        <move file="x3d-3.1Documentation.html" tofile="X3dDoctypeDocumentation3.1.html" failonerror='false'/>
+        <move file="x3d-3.2Documentation.html" tofile="X3dDoctypeDocumentation3.2.html" failonerror='false'/>
+        <move file="x3d-3.3Documentation.html" tofile="X3dDoctypeDocumentation3.3.html" failonerror='false'/>
+        <move file="x3d-3.4Documentation.html" tofile="X3dDoctypeDocumentation3.4.html" failonerror='false'/>
+    </target>
+    
+    <target name="cleanupDoctypeDocumentation" description="fix header url from XML Spy schema documentation generator" >
+        <echo message="production note: DTD documentation is created manually within Netbeans via context menu for each DTD document"/>
+        <replace file="X3dDoctypeDocumentation3.0.html"  token="&lt;title&gt;DTD Grammar Documentation" value="&lt;title&gt;x3d-3.0.dtd DOCTYPE Grammar Documentation"                                        summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dDoctypeDocumentation3.0.html"  token="&lt;h2&gt;Element Index"   value="&lt;h2&gt;x3d-3.0.dtd DOCTYPE Grammar Documentation&lt;h2&gt;&#10;&lt;h2&gt;X3D Element Index"  summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dDoctypeDocumentation3.1.html"  token="&lt;title&gt;DTD Grammar Documentation" value="&lt;title&gt;x3d-3.1.dtd DOCTYPE Grammar Documentation"                                        summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dDoctypeDocumentation3.1.html"  token="&lt;h2&gt;Element Index"   value="&lt;h2&gt;x3d-3.1.dtd DOCTYPE Grammar Documentation&lt;h2&gt;&#10;&lt;h2&gt;X3D Element Index"  summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dDoctypeDocumentation3.2.html"  token="&lt;title&gt;DTD Grammar Documentation" value="&lt;title&gt;x3d-3.2.dtd DOCTYPE Grammar Documentation"                                        summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dDoctypeDocumentation3.2.html"  token="&lt;h2&gt;Element Index"   value="&lt;h2&gt;x3d-3.2.dtd DOCTYPE Grammar Documentation&lt;h2&gt;&#10;&lt;h2&gt;X3D Element Index"  summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dDoctypeDocumentation3.3.html"  token="&lt;title&gt;DTD Grammar Documentation" value="&lt;title&gt;x3d-3.3.dtd DOCTYPE Grammar Documentation"                                        summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dDoctypeDocumentation3.3.html"  token="&lt;h2&gt;Element Index"   value="&lt;h2&gt;x3d-3.3.dtd DOCTYPE Grammar Documentation&lt;h2&gt;&#10;&lt;h2&gt;X3D Element Index"  summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dDoctypeDocumentation3.4.html"  token="&lt;title&gt;DTD Grammar Documentation" value="&lt;title&gt;x3d-3.4.dtd DOCTYPE Grammar Documentation"                                        summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dDoctypeDocumentation3.4.html"  token="&lt;h2&gt;Element Index"   value="&lt;h2&gt;x3d-3.4.dtd DOCTYPE Grammar Documentation&lt;h2&gt;&#10;&lt;h2&gt;X3D Element Index"  summary="true" failOnNoReplacements="false"/>
+    </target>
+
+<!--
+    February 2012 improvement to XML Spy schema configuration:  a different
+    documentation-generation method is now used for the X3D schemas.  Instead
+    of one gigantic HTML file being produced, lots of individual HTML pages
+    are created, making overall responsiveness to end users much faster.
+-->
+
+    <target name="cleanupSchemaDocumentation" description="fix header url from XML Spy schema documentation generator" >
+        <echo message="production note: schema documentation is created manually within XML Spy via menu for autogenerating schema documentation"/>
+        <!-- regular expression (regex) replacement -->
+        <replace file="X3dSchemaDocumentation3.0/x3d-3.0.html" token="C:\x3d-code\www.web3d.org\specifications\x3d-3"         value="http://www.web3d.org/specifications/x3d-3"  summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dSchemaDocumentation3.1/x3d-3.1.html" token="C:\x3d-code\www.web3d.org\specifications\x3d-3"         value="http://www.web3d.org/specifications/x3d-3"  summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dSchemaDocumentation3.2/x3d-3.2.html" token="C:\x3d-code\www.web3d.org\specifications\x3d-3"         value="http://www.web3d.org/specifications/x3d-3"  summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dSchemaDocumentation3.3/x3d-3.3.html" token="C:\x3d-code\www.web3d.org\specifications\x3d-3"         value="http://www.web3d.org/specifications/x3d-3"  summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dSchemaDocumentation3.4/x3d-3.4.html" token="C:\x3d-code\www.web3d.org\specifications\x3d-3"         value="http://www.web3d.org/specifications/x3d-3"  summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dSchemaDocumentation3.0/x3d-3.0.html" token="file:///C:/x3d-code/www.web3d.org/specifications/x3d-3" value="http://www.web3d.org/specifications/x3d-3"  summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dSchemaDocumentation3.1/x3d-3.1.html" token="file:///C:/x3d-code/www.web3d.org/specifications/x3d-3" value="http://www.web3d.org/specifications/x3d-3"  summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dSchemaDocumentation3.2/x3d-3.2.html" token="file:///C:/x3d-code/www.web3d.org/specifications/x3d-3" value="http://www.web3d.org/specifications/x3d-3"  summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dSchemaDocumentation3.3/x3d-3.3.html" token="file:///C:/x3d-code/www.web3d.org/specifications/x3d-3" value="http://www.web3d.org/specifications/x3d-3"  summary="true" failOnNoReplacements="false"/>
+        <replace file="X3dSchemaDocumentation3.4/x3d-3.4.html" token="file:///C:/x3d-code/www.web3d.org/specifications/x3d-3" value="http://www.web3d.org/specifications/x3d-3"  summary="true" failOnNoReplacements="false"/>
+        <delete  file="X3dSchemaDocumentation3.0/tmp0000.html" verbose="true"/>
+        <delete  file="X3dSchemaDocumentation3.1/tmp0000.html" verbose="true"/>
+        <delete  file="X3dSchemaDocumentation3.2/tmp0000.html" verbose="true"/>
+        <delete  file="X3dSchemaDocumentation3.3/tmp0000.html" verbose="true"/>
+        <delete  file="X3dSchemaDocumentation3.4/tmp0000.html" verbose="true"/>
+    </target>
+
+    <target name="cleanupSchemaHeaderComments" description="fix header comment from XML Spy inserted in schemas" >
+        <replace file="x3d-3.4.xsd"  token="&lt;!-- edited with XMLSpy v2015 rel. 3 sp1 (x64) (http://www.altova.com) by Don Brutzman (Naval Postgraduate School) --&gt;"   value=""  summary="true" failOnNoReplacements="false"/>
+        <replace file="x3d-3.3.xsd"  token="&lt;!-- edited with XMLSpy v2015 rel. 3 sp1 (x64) (http://www.altova.com) by Don Brutzman (Naval Postgraduate School) --&gt;"   value=""  summary="true" failOnNoReplacements="false"/>
+        <replace file="x3d-3.2.xsd"  token="&lt;!-- edited with XMLSpy v2015 rel. 3 sp1 (x64) (http://www.altova.com) by Don Brutzman (Naval Postgraduate School) --&gt;"   value=""  summary="true" failOnNoReplacements="false"/>
+        <replace file="x3d-3.1.xsd"  token="&lt;!-- edited with XMLSpy v2015 rel. 3 sp1 (x64) (http://www.altova.com) by Don Brutzman (Naval Postgraduate School) --&gt;"   value=""  summary="true" failOnNoReplacements="false"/>
+        <replace file="x3d-3.0.xsd"  token="&lt;!-- edited with XMLSpy v2015 rel. 3 sp1 (x64) (http://www.altova.com) by Don Brutzman (Naval Postgraduate School) --&gt;"   value=""  summary="true" failOnNoReplacements="false"/>
+    </target>
+
+    <!-- original tasks for specifications/documents found in X3D-Edit project for constructing embedded javahelp -->
+    <property name="draft.specification.site"    value="http://www.igraphics.com/Standards"/>
+    <property name="web3d.specification.site"    value="http://www.web3d.org/specifications"/>
+    <property name="web3d.standards.site"        value="http://www.web3d.org/documents/specifications"/>
+    <property name="collada.specification.site"  value="http://www.khronos.org/files"/>
+    <property name="X3dAllSpecifications"        value="X3DPublicSpecifications"/>
+    <property name="VRML97"                      value="ISO-IEC-14772-IS-V2.0"/>
+    <property name="VRML97Amendment1"            value="ISO-IEC-14772-1-IS-V2.1"/>
+    <property name="Collada"                     value="collada_spec_1_4.pdf"/>
+
+    <target name="clean.specifications">
+        <delete dir="specifications" verbose="true"/>
+    </target>
+
+    <target name="clean.SchemaDocumentation">
+        <echo message="Cleaning X3dSchemaDocumentation directories..."/>
+        <delete dir="X3dSchemaDocumentation3.0" verbose="true"/>
+        <delete dir="X3dSchemaDocumentation3.1" verbose="true"/>
+        <delete dir="X3dSchemaDocumentation3.2" verbose="true"/>
+        <delete dir="X3dSchemaDocumentation3.3" verbose="true"/>
+        <delete dir="X3dSchemaDocumentation3.4" verbose="true"/>
+        <mkdir  dir="X3dSchemaDocumentation3.0"/>
+        <mkdir  dir="X3dSchemaDocumentation3.1"/>
+        <mkdir  dir="X3dSchemaDocumentation3.2"/>
+        <mkdir  dir="X3dSchemaDocumentation3.3"/>
+        <mkdir  dir="X3dSchemaDocumentation3.4"/>
+    </target>
+
+    <!-- <property name="saveZips" value="true"/>  debug: comment out this line to avoid setting property value and thus retain .zip files -->
+    <target name="clean.specification.zips" unless="saveZips">
+        <delete                 file="documents/${X3dAllSpecifications}.zip" verbose="true"/>
+        <delete                 file="documents/${HumanoidAnimation}.zip"    verbose="true"/>
+        <delete                 file="documents/${VRML97}.zip"               verbose="true"/>
+    </target>
+
+    <target name="get.specifications">
+        <mkdir dir="documents"/>
+
+        <!-- Ecmascript specification -->
+        <get src="${web3d.specification.site}/Ecma-262.pdf"
+                                dest="documents/Ecma-262.pdf" verbose="true"/>
+        
+        <!-- Collada Specification -->
+        <get src="${collada.specification.site}/${Collada}"
+                                dest="documents/${Collada}" verbose="true"/>
+        
+        <!-- VRML97 Specification http://www.web3d.org/documents/specifications/14772/V2.0/ISO-IEC-14772-IS-V2.0.zip -->
+        <get src="${web3d.standards.site}/14772/V2.0/${VRML97}.zip"
+                                dest="documents/${VRML97}.zip" verbose="true"/>
+        <unzip                   src="documents/${VRML97}.zip"
+                                dest="documents/"  overwrite="true"/>
+        
+        <!-- VRML97 Amendment 1 http://www.web3d.org/documents/specifications/14772-1/V2.1/ISO-IEC-14772-1-IS-V2.1.zip -->
+        <get src="${web3d.standards.site}/14772-1/V2.1/${VRML97Amendment1}.zip"
+                                dest="documents/${VRML97Amendment1}.zip" verbose="true"/>
+        <unzip                   src="documents/${VRML97Amendment1}.zip"
+                                dest="documents/"  overwrite="true"/>
+        
+        <!-- X3D abstract and related specifications -->
+        <get src="${web3d.standards.site}/${X3dAllSpecifications}.zip"
+                                dest="documents/${X3dAllSpecifications}.zip" verbose="true"/>
+        <unzip                   src="documents/${X3dAllSpecifications}.zip"
+                                dest="documents/" overwrite="true"/>
+        
+        <!-- TODO fix these downloads and javadoc getDocs.xml for all specifications -->
+
+        <!-- important workaround for JavaHelp bug with paths having multiple periods by renaming the offending directories - also see javahelp/x3d-map.xml files -->
+        <move file="documents/ISO-IEC-19775-1.2-X3D-AbstractSpecification"                tofile="documents/ISO-IEC-19775-1-2-X3D-AbstractSpecification"/>
+        <move file="documents/ISO-IEC-19776-1.2-X3DEncodings-XML"                         tofile="documents/ISO-IEC-19776-1-2-X3DEncodings-XML"/>
+        <move file="documents/ISO-IEC-19776-2.2-X3DEncodings-ClassicVRML"                 tofile="documents/ISO-IEC-19776-2-2-X3DEncodings-ClassicVRML"/>
+        <move file="documents/ISO-IEC-FCD-19776-3.2-X3DEncodings-CompressedBinary"        tofile="documents/ISO-IEC-FCD-19776-3-2-X3DEncodings-CompressedBinary"/>
+        <move file="documents/ISO-IEC-FDIS-19775-2.2-X3D-SceneAccessInterface"            tofile="documents/ISO-IEC-FDIS-19775-2-2-X3D-SceneAccessInterface"/>
+<!--
+ISO-IEC-19774-HumanoidAnimation
+ISO-IEC-19775-1.2-X3D-AbstractSpecification
+ISO-IEC-19775-2-X3D-SceneAccessInterface
+ISO-IEC-19776-1.2-X3DEncodings-XML
+ISO-IEC-19776-2.2-X3DEncodings-ClassicVRML
+ISO-IEC-19776-3-X3DEncodings-CompressedBinary
+ISO-IEC-19776-X3DEncodings-All-Edition-1
+ISO-IEC-19777-1-X3DLanguageBindings-ECMAScript
+ISO-IEC-19777-2-X3DLanguageBindings-Java
+ISO-IEC-19777-X3DLanguageBindings
+ISO-IEC-FCD-19776-3.2-X3DEncodings-CompressedBinary
+ISO-IEC-FDIS-19775-2.2-X3D-SceneAccessInterface
+-->
+        <!-- TODO:  copy best .css -->
+        <antcall target="clean.standards.zips"/>
+    </target>
+
+    <target name="view.contents.local" description="view local examples in web browser (Netbeans only)">
+        <nbbrowse file="contents.html" />
+        <!-- TODO implementation-independent approach if possible.  other Ant approachs have to be customized for each OS -->
+    </target>
+
+    <target name="view.contents.online" description="view online examples in web browser (Netbeans only)">
+        <nbbrowse url="http://www.web3d.org/specifications/contents.html" />
+    </target>
+
+    <target name="view.BuildSpecificationLanguageBindingJava.local" description="view local BuildSpecificationLanguageBindingJava appendices in web browser (Netbeans only)">
+        <nbbrowse file="JavaLanguageBinding/Part2/abstracts.html" />
+        <nbbrowse file="JavaLanguageBinding/Part2/concretes.html" />
+    </target>
+    
+</project>

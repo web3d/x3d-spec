@@ -1,0 +1,10 @@
+# Filename:    access.properties.template
+
+# Description: to support upload access, save the template file as access.properties and modify values for your account.
+
+# Warning:     do not check any username/password, directory or configuration values back into version control!
+
+sftpServer.web3d=CHANGEME
+sftpDirectory.web3d.specifications=CHANGEME
+username.web3d=CHANGEME
+password.web3d=CHANGEME
